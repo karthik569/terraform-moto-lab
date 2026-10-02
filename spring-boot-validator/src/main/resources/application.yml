@@ -1,0 +1,18 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: spring-boot-validator
+
+aws:
+  endpoint: "http://127.0.0.1:5000"
+  region: "us-east-1"
+  access-key: "mock_access_key"
+  secret-key: "mock_secret_key"
+
+pipeline:
+  queue-url: "http://127.0.0.1:5000/123456789012/serverless-orders-orders-queue"
+  dlq-url: "http://127.0.0.1:5000/123456789012/serverless-orders-orders-dlq"
+  table-name: "serverless-orders-orders"
+  topic-arn: "arn:aws:sns:us-east-1:123456789012:serverless-orders-order-events"

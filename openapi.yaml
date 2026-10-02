@@ -1,0 +1,169 @@
+openapi: 3.0.3
+info:
+  title: Serverless Orders Processing API
+  version: 1.0.0
+  description: >
+    Asynchronous event-driven order processing pipeline provisioned via Terraform
+    and backed by API Gateway v2, AWS Lambda, SQS, DynamoDB, and SNS.
+servers:
+  - url: http://127.0.0.1:5000
+    description: Local Moto AWS Server
+  - url: https://hcoqbmuq.execute-api.us-east-1.amazonaws.com
+    description: Simulated API Gateway HTTP API Endpoint
+
+paths:
+  /orders:
+    post:
+      summary: Submit new order for asynchronous processing
+      description: >
+        Receives order details, validates schema, generates a unique order identifier,
+        and enqueues the payload to SQS for downstream worker processing.
+      operationId: createOrder
+      requestBody:
+        required: true
+        description: Order submission payload
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderInput'
+            example:
+              customer_id: "cust-1001"
+              order_type: "Express"
+              items:
+                - sku: "KEY-01"
+                  name: "Mechanical Keyboard 75%"
+                  qty: 1
+                  price: 119.99
+                - sku: "CBL-02"
+                  name: "Coiled Aviator Cable"
+                  qty: 1
+                  price: 24.50
+              total_amount: 144.49
+      responses:
+        '202':
+          description: Order accepted and queued to SQS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAcceptedResponse'
+              example:
+                message: "Order successfully accepted and queued"
+                order_id: "ord-8fa291b4"
+                status: "QUEUED"
+                sqs_message_id: "7b09bf11-c672-46a2-9721-a3f290d23812"
+                timestamp: "2026-10-02T16:13:05.103500+00:00"
+        '400':
+          description: Invalid request payload (missing required customer_id or items)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Bad Request"
+                message: "'customer_id' and 'items' are required"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:serverless-orders-producer/invocations"
+        payloadFormatVersion: "2.0"
+
+components:
+  schemas:
+    OrderItem:
+      type: object
+      required:
+        - sku
+        - name
+        - qty
+        - price
+      properties:
+        sku:
+          type: string
+          description: Unique product SKU
+          example: "KEY-01"
+        name:
+          type: string
+          description: Item display name
+          example: "Mechanical Keyboard"
+        qty:
+          type: integer
+          minimum: 1
+          description: Quantity ordered
+          example: 1
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Unit price
+          example: 119.99
+
+    OrderInput:
+      type: object
+      required:
+        - customer_id
+        - items
+        - total_amount
+      properties:
+        order_id:
+          type: string
+          description: Optional client-specified UUID; generated automatically if omitted
+          example: "ord-8fa291b4"
+        customer_id:
+          type: string
+          description: Customer identifier
+          example: "cust-1001"
+        order_type:
+          type: string
+          description: Order priority category
+          enum: [Standard, Express, Priority]
+          default: Standard
+          example: "Express"
+        items:
+          type: array
+          description: List of items purchased
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        total_amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Total order charge amount
+          example: 144.49
+
+    OrderAcceptedResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Order successfully accepted and queued"
+        order_id:
+          type: string
+          example: "ord-8fa291b4"
+        status:
+          type: string
+          enum: [QUEUED]
+          example: "QUEUED"
+        sqs_message_id:
+          type: string
+          example: "7b09bf11-c672-46a2-9721-a3f290d23812"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-02T16:13:05.103500+00:00"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Bad Request"
+        message:
+          type: string
+          example: "'customer_id' and 'items' are required"
